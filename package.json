@@ -1,0 +1,30 @@
+{
+  "name": "simontime",
+  "author": "sheppoor",
+  "version": "1.0.0",
+  "keywords": ["pebble-app"],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "SimonTime",
+    "uuid": "6faaec38-d246-419e-852c-ce5295a85e97",
+    "sdkVersion": "3",
+    "enableMultiJS": false,
+    "targetPlatforms": ["emery", "gabbro"],
+    "watchapp": {
+      "watchface": false
+    },
+    "messageKeys": [],
+    "resources": {
+      "media": [
+        {
+          "type": "png",
+          "name": "APP_ICON",
+          "file": "images/app_icon.png",
+          "menuIcon": true,
+          "targetPlatforms": ["emery", "gabbro"]
+        }
+      ]
+    }
+  }
+}
