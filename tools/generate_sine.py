@@ -5,7 +5,7 @@ Generates a sine lookup table as a C header, for the WAVEFORM_SINE timbre
 fallback. The default timbre is WAVEFORM_SQUARE, which needs no table (it is the
 sign of the phase MSB), so this header only matters when SINE is selected.
 
-Output: src/c/simon_synth_tables.h
+Output: src/c/synth_tables.h
 Format: one cycle of sin(2*pi*i/N) scaled to int16, indexed by the top 8 bits of
 a 32-bit phase accumulator.
 """
@@ -39,6 +39,6 @@ lines = [
     "",
 ]
 
-with open("src/c/simon_synth_tables.h", "w") as f:
+with open("src/c/synth_tables.h", "w") as f:
     f.write("\n".join(lines))
-print("Wrote src/c/simon_synth_tables.h")
+print("Wrote src/c/synth_tables.h")

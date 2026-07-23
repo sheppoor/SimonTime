@@ -1,15 +1,10 @@
 # SimonTime
 
-> *"Watch closely. Now do it back."*
+A [Pebble Time 2 / Pebble Round 2](https://repebble.com/) watch app game playing
+the classic memory game. Watch the pattern of colors flash, then touch them back
+in order. Each round adds one more step and speeds up.
 
-A [Pebble Time 2 / Pebble Round 2](https://repebble.com/) watch app — a clone of
-the classic **Simon** memory game. Watch the pattern of colors flash, then touch
-them back in order. Each round adds one more step and speeds up.
-
-No menus, no words, no network. Just the four colors, a growing sequence, and the
-numbers in the middle.
-
-This is a demo touch + speaker game for the color Pebbles.
+This is a demo touch + speaker game for the new color Pebbles.
 
 ---
 
@@ -19,25 +14,18 @@ This is a demo touch + speaker game for the color Pebbles.
 |---|---|---|
 | Screen | rectangular, 200 × 228 | round, 260 × 260 |
 | Board | four corner **rectangles** | four **wedges** |
-| Sound | ✅ tones + "wamp" | ❌ no speaker — **vibration only** |
-
-The board is drawn native to each screen. Because gabbro has no speaker, the
-color tones, the loss sound, and the volume control are compiled out there and
-the game plays as a purely **visual** memory game with a vibration on loss. All
-sound code is guarded behind `PBL_SPEAKER`.
+| Sound | ✅ Yes (optional) | ❌ no speaker — **vibration only** |
 
 ## Features
 
-- **Touch Simon board** — four color quadrants (Green / Red / Yellow / Blue) in
-  the classic "+"-split arrangement, with a circular center display. Big,
+- **Touch Screen** — four color quadrants with a circular center display. Big,
   forgiving hit boxes: each quadrant is a quarter of the screen.
 - **Watch, then repeat** — the watch flashes the sequence (each step a white
   border + tone), you touch it back. Touching a quadrant flashes its white
   border rather than changing its color.
 - **It speeds up** — every round appends one step and shortens the playback,
   smoothly, down to a floor.
-- **Authentic Simon tones** (emery) — the original four frequencies
-  (415 / 310 / 252 / 209 Hz), synthesized live on-device.
+- **Tones** — four frequencies, synthesized live on-device. (Pebble Time 2 only)
 - **Score + high score** — the center hub shows the current depth while playing,
   your final depth at game-over, and your persisted high score (with a ★) while
   idle. Numbers and symbols only — no words anywhere in the app.
@@ -51,7 +39,7 @@ sample, streamed as raw 8 kHz / 16-bit PCM via `speaker_stream_open()` /
 build-time choice — **square** (authentic, the default) or **sine** (a softer
 fallback) — set by the `WAVEFORM` constant in `main.c`. The "wamp wamp" loss
 sound is two descending, pitch-bent notes made by ramping the phase increment
-down. On gabbro all of this is a no-op and a vibration stands in.
+down. On gabbro a vibration stands in.
 
 The game is a small state machine (`IDLE → PLAYBACK → INPUT → LOSE`) driven by
 `AppTimer`s, with a single "last activity" clock powering a per-step input
@@ -82,7 +70,7 @@ pebble logs --emulator emery
 > hardware. Press **Select** in the emulator to watch a sequence play back.
 
 The `tools/generate_sine.py` script (needs `numpy`) regenerates
-`src/c/simon_synth_tables.h`, the sine table used only by the `WAVEFORM_SINE`
+`src/c/synth_tables.h`, the sine table used only by the `WAVEFORM_SINE`
 fallback. It is committed, so you only need to re-run it if you change the table.
 
 ### On-device
@@ -100,7 +88,7 @@ pebble logs --phone <IP_ADDRESS>
 |---|---|
 | Touch a quadrant | (during your turn) repeat that step of the sequence |
 | Select | Start a new game (from any state) |
-| Up | Volume: mute → 25% → 50% (emery only; unused on gabbro) |
+| Up | Volume: mute → 25% (emery only; unused on gabbro) |
 | Down | Unused |
 | Back | Exit the app |
 

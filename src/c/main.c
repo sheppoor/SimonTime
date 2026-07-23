@@ -1,5 +1,5 @@
 /*
- * SimonTime - a Simon memory game for Pebble Time 2 (emery) and Pebble Round 2
+ * SimonTime - a memory game for Pebble Time 2 (emery) and Pebble Round 2
  * (gabbro). Touch the four color quadrants to repeat an ever-growing sequence.
  *
  * Sound (tones + "wamp" loss) is emery-only (gabbro has no speaker); on gabbro
@@ -16,13 +16,13 @@
 #define WAVEFORM_SINE   1
 #define WAVEFORM        WAVEFORM_SQUARE
 
-/* Tone frequencies (Hz) by quadrant (authentic MB Simon values). */
+/* Tone frequencies (Hz) by quadrant */
 #define FREQ_GREEN   415   /* TL */
 #define FREQ_RED     310   /* TR */
 #define FREQ_YELLOW  252   /* BL */
 #define FREQ_BLUE    209   /* BR */
 
-#define TONE_FLOOR_MS   120   /* minimum audible/visible blip for a tap */
+#define TONE_FLOOR_MS   150   /* minimum tone duration for a correct touch */
 
 /* Speed (playback only). step = max(MIN, BASE * FACTOR^(depth-1)). */
 #define STEP_ON_BASE_MS    420
@@ -35,7 +35,7 @@
 /* Pacing */
 #define PLAYBACK_END_PAUSE_MS   350
 #define ROUND_COMPLETE_PAUSE_MS 500
-#define GAME_OVER_MS            2000
+#define GAME_OVER_MS            7000  /* hold the depth count this long before idle/high score */
 
 /* Timeouts (single activity clock) */
 #define INPUT_TIMEOUT_MS     5000
@@ -46,8 +46,7 @@
 /* Volume */
 #define VOLUME_OVERLAY_MS  4000
 #define VOL_MUTE 0
-#define VOL_LOW  25
-#define VOL_HIGH 50
+#define VOL_LOW  25   /* two states only: mute and 25% */
 
 /* Layout */
 #define GAP        3    /* half-width of the "+" gap between quadrants */
@@ -150,7 +149,7 @@ static uint32_t step_gap_ms(void) { return scaled_ms(STEP_GAP_BASE_MS, STEP_GAP_
 #if defined(PBL_SPEAKER)
 
 #if WAVEFORM == WAVEFORM_SINE
-#include "simon_synth_tables.h"
+#include "synth_tables.h"
 #endif
 
 #define SR              8000
@@ -389,12 +388,11 @@ static void draw_volume_symbol(GContext *ctx, GPoint c) {
     graphics_draw_line(ctx, GPoint(wx, by - 6), GPoint(wx + 10, by + 6));
     graphics_draw_line(ctx, GPoint(wx, by + 6), GPoint(wx + 10, by - 6));
   } else {
+    /* 25% uses the full two-wave visual (there is no separate "high" state). */
     graphics_draw_arc(ctx, GRect(wx - 8, by - 10, 20, 20), GOvalScaleModeFitCircle,
                       DEG_TO_TRIGANGLE(60), DEG_TO_TRIGANGLE(120));
-    if (s_volume == VOL_HIGH) {
-      graphics_draw_arc(ctx, GRect(wx - 14, by - 16, 32, 32), GOvalScaleModeFitCircle,
-                        DEG_TO_TRIGANGLE(60), DEG_TO_TRIGANGLE(120));
-    }
+    graphics_draw_arc(ctx, GRect(wx - 14, by - 16, 32, 32), GOvalScaleModeFitCircle,
+                      DEG_TO_TRIGANGLE(60), DEG_TO_TRIGANGLE(120));
   }
 }
 #endif  /* PBL_SPEAKER */
@@ -406,23 +404,26 @@ static void draw_quad(GContext *ctx, int q) {
   bool active = (q == s_active_quad);
   GColor color = color_for_quad(q);
 #if defined(PBL_ROUND)
+  /* Full 90-degree wedges (no angular gap). The separators are straight "+"
+   * bars drawn on top in canvas_update_proc, so the gaps look straight rather
+   * than crooked radiating lines. */
   int a0, a1;
   quad_angles(q, &a0, &a1);
   GRect full = GRect(s_cx - s_R, s_cy - s_R, s_R * 2, s_R * 2);
-  int ga = 2; /* angular gap in degrees */
   if (active) {
+    /* white wedge, then color inset in radius -> solid white rim border */
     graphics_context_set_fill_color(ctx, GColorWhite);
     graphics_fill_radial(ctx, full, GOvalScaleModeFitCircle, s_R,
-                         DEG_TO_TRIGANGLE(a0 + ga), DEG_TO_TRIGANGLE(a1 - ga));
+                         DEG_TO_TRIGANGLE(a0), DEG_TO_TRIGANGLE(a1));
     int r2 = s_R - BORDER_W;
     GRect inner = GRect(s_cx - r2, s_cy - r2, r2 * 2, r2 * 2);
     graphics_context_set_fill_color(ctx, color);
     graphics_fill_radial(ctx, inner, GOvalScaleModeFitCircle, r2,
-                         DEG_TO_TRIGANGLE(a0 + ga + 3), DEG_TO_TRIGANGLE(a1 - ga - 3));
+                         DEG_TO_TRIGANGLE(a0), DEG_TO_TRIGANGLE(a1));
   } else {
     graphics_context_set_fill_color(ctx, color);
     graphics_fill_radial(ctx, full, GOvalScaleModeFitCircle, s_R,
-                         DEG_TO_TRIGANGLE(a0 + ga), DEG_TO_TRIGANGLE(a1 - ga));
+                         DEG_TO_TRIGANGLE(a0), DEG_TO_TRIGANGLE(a1));
   }
 #else
   GRect r = quad_rect(q);
@@ -439,6 +440,34 @@ static void draw_quad(GContext *ctx, int q) {
   }
 #endif
 }
+
+#if defined(PBL_ROUND)
+/* White border along the active wedge's two straight (inner) edges, drawn as
+ * straight bars just outside the "+" gap. Combined with the rim from draw_quad,
+ * this gives the active wedge a full, straight-edged border. */
+static void draw_round_active_edges(GContext *ctx, int q) {
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  int g = GAP, bw = BORDER_W, R = s_R, cx = s_cx, cy = s_cy;
+  switch (q) {
+    case Q_TL:
+      graphics_fill_rect(ctx, GRect(cx - g - bw, cy - R, bw, R - g), 0, GCornerNone);
+      graphics_fill_rect(ctx, GRect(cx - R, cy - g - bw, R - g, bw), 0, GCornerNone);
+      break;
+    case Q_TR:
+      graphics_fill_rect(ctx, GRect(cx + g, cy - R, bw, R - g), 0, GCornerNone);
+      graphics_fill_rect(ctx, GRect(cx + g, cy - g - bw, R - g, bw), 0, GCornerNone);
+      break;
+    case Q_BL:
+      graphics_fill_rect(ctx, GRect(cx - g - bw, cy + g, bw, R - g), 0, GCornerNone);
+      graphics_fill_rect(ctx, GRect(cx - R, cy + g, R - g, bw), 0, GCornerNone);
+      break;
+    case Q_BR:
+      graphics_fill_rect(ctx, GRect(cx + g, cy + g, bw, R - g), 0, GCornerNone);
+      graphics_fill_rect(ctx, GRect(cx + g, cy + g, R - g, bw), 0, GCornerNone);
+      break;
+  }
+}
+#endif
 
 static void draw_hub_number(GContext *ctx, int n, bool star) {
   char buf[8];
@@ -459,6 +488,14 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   graphics_fill_rect(ctx, b, 0, GCornerNone);
 
   for (int q = 0; q < 4; q++) draw_quad(ctx, q);
+
+#if defined(PBL_ROUND)
+  /* Straight "+" separators between wedges (a little gap, not crooked). */
+  graphics_context_set_fill_color(ctx, GColorBlack);
+  graphics_fill_rect(ctx, GRect(s_cx - GAP, 0, 2 * GAP, b.size.h), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(0, s_cy - GAP, b.size.w, 2 * GAP), 0, GCornerNone);
+  if (s_active_quad != Q_NONE) draw_round_active_edges(ctx, s_active_quad);
+#endif
 
   /* center hub */
   graphics_context_set_fill_color(ctx, GColorBlack);
@@ -490,7 +527,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
 static void load_persist(void) {
 #if defined(PBL_SPEAKER)
   s_volume = persist_exists(PKEY_VOLUME) ? (uint8_t)persist_read_int(PKEY_VOLUME) : VOL_LOW;
-  if (s_volume != VOL_MUTE && s_volume != VOL_LOW && s_volume != VOL_HIGH) s_volume = VOL_LOW;
+  if (s_volume != VOL_MUTE && s_volume != VOL_LOW) s_volume = VOL_LOW;
 #endif
   s_last_score = persist_exists(PKEY_LAST) ? persist_read_int(PKEY_LAST) : 0;
   s_high_score = persist_exists(PKEY_HIGH) ? persist_read_int(PKEY_HIGH) : 0;
@@ -636,7 +673,18 @@ static void stop_input_tone(void *ctx) {
 
 static void touch_handler(const TouchEvent *event, void *context) {
   if (!s_app_in_focus) return;
-  if (s_state != ST_INPUT) return;              /* only the player's turn */
+
+  /* When no game is in progress (idle or on the game-over screen), a touch in
+   * the center hub starts a new game — the same as the Select button. */
+  if (s_state == ST_IDLE || s_state == ST_GAMEOVER) {
+    if (event->type == TouchEvent_Touchdown &&
+        hit_test(event->x, event->y) == Q_NONE) {
+      mark_activity();
+      start_new_game();
+    }
+    return;
+  }
+  if (s_state != ST_INPUT) return;              /* PLAYBACK: input locked */
 
   switch (event->type) {
     case TouchEvent_Touchdown: {
@@ -682,9 +730,7 @@ static void touch_handler(const TouchEvent *event, void *context) {
 /* ================================================================== */
 #if defined(PBL_SPEAKER)
 static uint8_t next_volume(uint8_t v) {
-  if (v == VOL_MUTE) return VOL_LOW;
-  if (v == VOL_LOW)  return VOL_HIGH;
-  return VOL_MUTE;
+  return (v == VOL_MUTE) ? VOL_LOW : VOL_MUTE;  /* two states: mute <-> 25% */
 }
 
 static void hide_volume_cb(void *ctx) {
