@@ -22,7 +22,7 @@
 #define FREQ_YELLOW  252   /* BL */
 #define FREQ_BLUE    209   /* BR */
 
-#define TONE_FLOOR_MS   150   /* minimum tone duration for a correct touch */
+#define TONE_FLOOR_MS   250   /* minimum tone duration for a correct touch */
 
 /* Speed (playback only). step = max(MIN, BASE * FACTOR^(depth-1)). */
 #define STEP_ON_BASE_MS    420
@@ -85,6 +85,7 @@ static uint32_t s_touch_down_ms = 0;
 static int  s_last_score = 0;
 static int  s_high_score = 0;
 static bool s_new_high = false;
+static bool s_has_played = false;   /* has a game been started this launch? */
 
 #if defined(PBL_SPEAKER)
 static uint8_t s_volume = VOL_LOW;    /* persisted; volume is emery-only */
@@ -415,6 +416,13 @@ static void draw_quad(GContext *ctx, int q) {
     graphics_context_set_fill_color(ctx, GColorWhite);
     graphics_fill_radial(ctx, full, GOvalScaleModeFitCircle, s_R,
                          DEG_TO_TRIGANGLE(a0), DEG_TO_TRIGANGLE(a1));
+    if (q == Q_BL) {  /* yellow: black line inside the white rim (half thickness) */
+      int rb = s_R - BORDER_W / 2;
+      GRect blk = GRect(s_cx - rb, s_cy - rb, rb * 2, rb * 2);
+      graphics_context_set_fill_color(ctx, GColorBlack);
+      graphics_fill_radial(ctx, blk, GOvalScaleModeFitCircle, rb,
+                           DEG_TO_TRIGANGLE(a0), DEG_TO_TRIGANGLE(a1));
+    }
     int r2 = s_R - BORDER_W;
     GRect inner = GRect(s_cx - r2, s_cy - r2, r2 * 2, r2 * 2);
     graphics_context_set_fill_color(ctx, color);
@@ -430,6 +438,12 @@ static void draw_quad(GContext *ctx, int q) {
   if (active) {
     graphics_context_set_fill_color(ctx, GColorWhite);
     graphics_fill_rect(ctx, r, 0, GCornerNone);
+    if (q == Q_BL) {  /* yellow: black line inside the white (half thickness) */
+      int hb = BORDER_W / 2;
+      graphics_context_set_fill_color(ctx, GColorBlack);
+      graphics_fill_rect(ctx, GRect(r.origin.x + hb, r.origin.y + hb,
+                                    r.size.w - 2 * hb, r.size.h - 2 * hb), 0, GCornerNone);
+    }
     GRect inner = GRect(r.origin.x + BORDER_W, r.origin.y + BORDER_W,
                         r.size.w - 2 * BORDER_W, r.size.h - 2 * BORDER_W);
     graphics_context_set_fill_color(ctx, color);
@@ -466,6 +480,13 @@ static void draw_round_active_edges(GContext *ctx, int q) {
       graphics_fill_rect(ctx, GRect(cx + g, cy + g, R - g, bw), 0, GCornerNone);
       break;
   }
+  if (q == Q_BL) {  /* yellow: black line inside the white edges (half thickness),
+                     * on the color-facing side of each bar */
+    graphics_context_set_fill_color(ctx, GColorBlack);
+    int hb = bw / 2;
+    graphics_fill_rect(ctx, GRect(cx - g - bw, cy + g, hb, R - g), 0, GCornerNone);
+    graphics_fill_rect(ctx, GRect(cx - R, cy + g + hb, R - g, hb), 0, GCornerNone);
+  }
 }
 #endif
 
@@ -478,7 +499,9 @@ static void draw_hub_number(GContext *ctx, int n, bool star) {
   graphics_draw_text(ctx, buf, font, box, GTextOverflowModeFill,
                      GTextAlignmentCenter, NULL);
   if (star) {
-    draw_star(ctx, GPoint(s_cx, s_cy - s_hub_r + 8), GColorYellow);
+    /* Sit just above the number (fixed offset from center so it lands the same
+     * on both hub sizes; the old hub_r-relative offset rode too high). */
+    draw_star(ctx, GPoint(s_cx, s_cy - 26), GColorYellow);
   }
 }
 
@@ -526,6 +549,8 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
 /* ================================================================== */
 static void load_persist(void) {
 #if defined(PBL_SPEAKER)
+  /* First-launch default is sound ON (VOL_LOW); it's a game and users expect
+   * sound. A persisted choice (including mute) is retained across launches. */
   s_volume = persist_exists(PKEY_VOLUME) ? (uint8_t)persist_read_int(PKEY_VOLUME) : VOL_LOW;
   if (s_volume != VOL_MUTE && s_volume != VOL_LOW) s_volume = VOL_LOW;
 #endif
@@ -615,6 +640,7 @@ static void start_new_game(void) {
   srand((unsigned)now_ms());
   s_depth = 1;
   s_new_high = false;
+  s_has_played = true;
   s_seq[0] = random_quad();
   mark_activity();
   enter_playback();
@@ -797,9 +823,20 @@ static void focus_did_change(bool in_focus) {
 /* ================================================================== */
 /* Housekeeping (single activity clock)                                */
 /* ================================================================== */
+/* Decide where the system lands when we exit (Back or auto-close):
+ *  - not yet played, or a game is in progress -> return to the MENU, so a casual
+ *    or accidental exit is easy to undo;
+ *  - has played and not actively in a game -> return to the WATCHFACE (done). */
+static void update_exit_reason(void) {
+  bool in_game = (s_state == ST_PLAYBACK || s_state == ST_INPUT);
+  exit_reason_set((s_has_played && !in_game) ? APP_EXIT_ACTION_PERFORMED_SUCCESSFULLY
+                                             : APP_EXIT_NOT_SPECIFIED);
+}
+
 static void housekeep_cb(void *ctx) {
   s_housekeep_timer = app_timer_register(HOUSEKEEP_MS, housekeep_cb, NULL);
   uint32_t now = now_ms();
+  update_exit_reason();
 
   if (s_state == ST_PLAYBACK || s_state == ST_GAMEOVER) {
     s_last_activity_ms = now;   /* watch is busy: keep lit, don't time out */
