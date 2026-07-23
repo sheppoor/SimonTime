@@ -543,6 +543,9 @@ static void save_scores(void) {
 static void cancel_game_timers(void) {
   cancel_timer(&s_seq_timer);
   cancel_timer(&s_flash_timer);
+  /* Also the game-over -> idle timer, so starting a new game during the
+   * game-over display doesn't get killed when that timer later fires. */
+  cancel_timer(&s_gameover_timer);
 }
 
 static void enter_idle(void) {
