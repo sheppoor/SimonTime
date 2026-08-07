@@ -6,6 +6,10 @@ in order. Each round adds one more step and speeds up.
 
 This is a demo touch + speaker game for the new color Pebbles.
 
+Install from the [Pebble appstore](https://apps.repebble.com/75a3c14b89724bd8b9c42be6)
+
+![Watch Screenshot](./img/simontime-screenshot.png)
+
 ---
 
 ## Two watches, one game
